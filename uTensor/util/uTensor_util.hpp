@@ -3,9 +3,6 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <vector>
-#include <iostream>
-
-using namespace std;
 
 // #define MAX(A, B) ((A > B)? A:B)
 
@@ -60,7 +57,7 @@ void utensor_exit(void);
     utensor_exit();                                          \
   }
 
-typedef std::vector<uint32_t> Shape;
+//typedef std::vector<uint32_t> Shape;
 
 void printVector(std::vector<uint32_t> vec);
 #ifdef TARGET_SIMULATOR

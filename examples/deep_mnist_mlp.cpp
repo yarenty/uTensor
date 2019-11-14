@@ -39,7 +39,7 @@ void ReluLayer(Context& ctx, TName x, TName x_min, TName x_max,
     ctx.add(new RamTensor<float>({1}), "matmul_out_min");
     ctx.add(new RamTensor<float>({1}), "matmul_out_max");
 
-    // printf("QntMulOp Shape:");
+    // printf("QntMulOp TensorShape:");
     // printf("\r\nx :");
     // printVector(ctx.get(x)->getShape());
     // printf("\r\nw :");
@@ -59,7 +59,7 @@ void ReluLayer(Context& ctx, TName x, TName x_min, TName x_max,
     ctx.add(new RamTensor<float>({1}), "reqnt_out_max");
     ctx.push(new RequantizeOp(), {"out_c", "matmul_out_min", "matmul_out_max", "req_out_min", "req_out_max"}, {"reqnt_out", "reqnt_out_min", "reqnt_out_max"});
 
-    Shape out_shape = out_c->getShape();
+    TensorShape out_shape = out_c->getShape();
     //clean up
 
     S_TENSOR deqnt_out = ctx.add(new RamTensor<float>(), "deqnt_out");
@@ -105,7 +105,7 @@ void PredLayer(Context &ctx, TName input, TName input_min,
   ctx.push(new ArgMaxOp<float, int>(), {"output_z_pred", dim}, {output});
 }
 
-int runMLP(string inputIdxFile) {
+int runMLP(const char* inputIdxFile) {
   TensorIdxImporter t_import;
   Context ctx;
   ctx.add(new RamTensor<unsigned char>(), "x_quantized"); 

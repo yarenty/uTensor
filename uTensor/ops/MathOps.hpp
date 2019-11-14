@@ -7,6 +7,7 @@
 #include <climits>
 #include <algorithm>
 #include <vector>
+#include <cmath>
 
 template<class T1>
 void CalculateUsedRange(Tensor* input, int32_t* used_min_quan,
@@ -35,7 +36,7 @@ void Requantization_Range(S_TENSOR input, S_TENSOR min, S_TENSOR max,
   int32_t used_max_quan;
   CalculateUsedRange<T1>(input.get(), &used_min_quan, &used_max_quan);
 
-  Shape one_shape = {1};
+  TensorShape one_shape = {1};
   if(out_min->getSize() == 0) out_min->resize(one_shape);
   if(out_max->getSize() == 0) out_max->resize(one_shape);
 
@@ -80,7 +81,7 @@ void Requantize(S_TENSOR input, S_TENSOR in_min, S_TENSOR in_max,
   RequantizeManyInNewRangeReference(input_ptr, input->getSize(),input_min,
     input_max, r_output_min, r_output_max, out_ptr);
 
-    Shape one_shape = {1};
+    TensorShape one_shape = {1};
     if(out_min->getSize() == 0) out_min->resize(one_shape);
     if(out_max->getSize() == 0) out_max->resize(one_shape);
 
@@ -121,16 +122,9 @@ void Add(Tensor* input, Tensor* input2, Tensor** out) {
   }
 }
 
-// void reduceShapeHelper(Shape input, Shape dim, Shape &reduce_shape, Shape &out_shape, std::vector<uint8_t> &perm, size_t &reduce_size);
-
-// template <class TIn, class TOut>
-// std::vector<TOut> tensorToLinearVec(S_TENSOR input);
-
-
-
 //reduce_shape actual output shape without the reduce dim
 //out_shape intermediate shape with reduce dim in the last orders
-inline void reduceShapeHelper(Shape input, Shape dim, Shape &reduce_shape, Shape &out_shape, std::vector<uint8_t> &perm, size_t &reduce_size) {
+inline void reduceShapeHelper(TensorShape input, TensorShape dim, TensorShape &reduce_shape, TensorShape &out_shape, std::vector<uint8_t> &perm, size_t &reduce_size) {
   reduce_shape.empty();
   out_shape.empty();
   perm.empty();
@@ -157,8 +151,8 @@ inline void reduceShapeHelper(Shape input, Shape dim, Shape &reduce_shape, Shape
 }
 
 template <class TIn, class TOut>
-inline std::vector<TOut> tensorToLinearVec(S_TENSOR input, S_TENSOR dim) {
-  std::vector<TOut> vec;
+inline TensorShape tensorToLinearVec(S_TENSOR input, S_TENSOR dim) {
+  TensorShape vec;
   const TIn* ptr = dim->read<TIn>(0, 0);
   for(auto i = 0; i < (int) dim->getSize(); i++) {
     TIn curr_dim = ptr[i];
@@ -177,14 +171,14 @@ inline std::vector<TOut> tensorToLinearVec(S_TENSOR input, S_TENSOR dim) {
 template <class TIn, class Td, class TOut>
 void MinMaxHelper(S_TENSOR input, S_TENSOR dim, S_TENSOR out, bool find_min) {
   const TIn* p_in = input->read<TIn>(0, 0);
-  Shape dim_vec = tensorToLinearVec<Td, uint32_t>(input, dim);
+  TensorShape dim_vec = tensorToLinearVec<Td, uint32_t>(input, dim);
 
-  Shape outShape;
+  TensorShape outShape;
   std::vector<uint8_t> permute;
   size_t reduce_size;
-  Shape reduce_shape;
+  TensorShape reduce_shape;
   reduceShapeHelper(input->getShape(), dim_vec, reduce_shape, outShape, permute, reduce_size);
-  Shape one_shape = {1};
+  TensorShape one_shape = {1};
   if(out->getSize() == 0) out->resize(reduce_shape);  //TODO: dimension check here
   TOut* p_out = out->write<TOut>(0, 0);
 
@@ -227,40 +221,6 @@ class MinOp : public Operator {
       MinMaxHelper<float, int, float>(inputs[0], inputs[1], outputs[0], true);
     }
 };
-// template <class TIn, class Td, class TOut>
-// void Max(S_TENSOR input, S_TENSOR dim, S_TENSOR out) {
-//   const TIn* p_in = input->read<TIn>(0, 0);
-//   const Td* p_in2 = dim->read<Td>(0, 0);
-
-//   Shape one_shape = {1};
-//   if(out->getSize() == 0) out->resize<TOut>(one_shape);
-//   TOut* p_out = out->write<TOut>(0, 0);
-
-//   Td n_dim = p_in2[0];
-//   std::vector<uint8_t> permute;
-//   for (uint32_t i_dim = 0; i_dim < input->getShape().size(); i_dim++) {
-//     permute.push_back(i_dim);
-//   }
-//   permute.push_back(n_dim);
-//   permute.erase(permute.begin() + n_dim);
-//   Shape outShape = input->getShape();
-//   size_t reduce_size = outShape[n_dim];
-//   outShape.erase(outShape.begin() + n_dim);
-//   outShape.push_back(reduce_size);
-//   size_t out_index = 0;
-//   permuteIndexTransform trans(outShape, permute);
-//   for (uint32_t j = 0; j < input->getSize(); j += reduce_size) {
-//     TIn max_val = std::numeric_limits<TIn>::lowest();
-//     for (size_t k = 0; k < reduce_size; k++) {
-//       TIn val = p_in[trans[j + k]];
-//       if (val > max_val) {
-//         max_val = val;
-//       }
-//     }
-//     p_out[out_index] = max_val;
-//     out_index++;
-//   }
-// }
 
 class MaxOp : public Operator {
   public:
@@ -277,7 +237,7 @@ class MaxOp : public Operator {
 template <class TIn, class TOut>
 void ArgMax(S_TENSOR input, S_TENSOR dim, S_TENSOR out) {
   int dim_reduce = *(dim->read<int>(0, 0));
-  Shape outShape = input->getShape();
+  TensorShape outShape = input->getShape();
   uint32_t reduce_dim_size = outShape[dim_reduce];
   outShape.erase(outShape.begin() + dim_reduce);
 
@@ -301,7 +261,7 @@ void ArgMax(S_TENSOR input, S_TENSOR dim, S_TENSOR out) {
   
 
   // construct the origin-shape for permuteIndexTransform
-  Shape vOutShape = outShape;
+  TensorShape vOutShape = outShape;
   vOutShape.push_back(reduce_dim_size);
   /// NT: easy way to remember...
   // trans(originShape, permute)
@@ -382,87 +342,125 @@ public:
 };
 
 // Note input_x should have >= the number of elements in input_y
+// https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/kernels/quantized_add_op.cc
+// T1: input quantize type
+// T2: input dequantize type
+// Toutput: output quantize type
+// the base template
 template <class T1, class T2, class Toutput>
-void QuantizedAdd(S_TENSOR input_x, S_TENSOR input_y, S_TENSOR min_x, S_TENSOR max_x,
-                S_TENSOR min_y, S_TENSOR max_y, S_TENSOR output,
-                S_TENSOR out_min, S_TENSOR out_max) {
-  const float input_x_min = min_x->read<T2>(0, 0)[0];
-  const float input_x_max = max_x->read<T2>(0, 0)[0];
-
-  const float input_y_min = min_y->read<T2>(0, 0)[0];
-  const float input_y_max = max_y->read<T2>(0, 0)[0];
-
-  const float r_output_min = out_min->read<T2>(0, 0)[0];
-  const float r_output_max = out_max->read<T2>(0, 0)[0];
-
-  const T1 *input_x_ptr = input_x->read<T1>(0, 0);
-  const T1 *input_y_ptr = input_y->read<T1>(0, 0);
-
-  if (output->getSize() == 0) output->resize(input_x->getShape());
-  Toutput *out_ptr = output->write<Toutput>(0, 0);
-
-  
-
-//  RequantizeManyInNewRangeReference(input_ptr, input->getSize(),input_min,
-//    input_max, r_output_min, r_output_max, out_ptr);
-
-  Shape one_shape = {1};
-  if(out_min->getSize() == 0) out_min->resize(one_shape);
-  if(out_max->getSize() == 0) out_max->resize(one_shape);
-
-  //Get output min and max for quantized add
-  float* v_out_min = out_min->write<T2>(0, 0);
-  float* v_out_max = out_max->write<T2>(0, 0);
-  *v_out_max = 
-    std::max(input_x_max, std::max(-input_x_min, std::max(input_y_max, 
-                                                          -input_y_min))) * 
-    ( 1 << 17);
-
-  *v_out_min = -(*v_out_max);
-
-  // To do addition properly, we need to compensate for a possibly unbalanced
-  // zero point in the total representation. The quantized value that
-  // represents the real number zero needs to be subtracted before addition to
-  // make sure that the identity of zero + zero = zero holds.
-  const Toutput zero_in_total_space =
-      FloatToQuantized<Toutput>(0.0f, *v_out_min, *v_out_max);
-  
+void QuantizedAdd(S_TENSOR input_x, S_TENSOR input_y,
+                  S_TENSOR min_x, S_TENSOR max_x,
+                  S_TENSOR min_y, S_TENSOR max_y,
+                  S_TENSOR output, S_TENSOR out_min, S_TENSOR out_max) {
   const uint32_t input_element_count = input_x->getSize();
   const uint32_t smaller_input_element_count = input_y->getSize();
+  const float value_x_min = *(min_x->read<T2>(0, 0));
+  const float value_x_max = *(max_x->read<T2>(0, 0));
+  const float value_y_min = *(min_y->read<T2>(0, 0));
+  const float value_y_max = *(max_y->read<T2>(0, 0));
+  float value_out_min = std::min(value_x_min, value_y_min);
+  float value_out_max = std::max(value_x_max, value_y_max);
 
-  float total_min = *v_out_min;
-  float total_max = *v_out_max;
+  Toutput* ptr_out_min = out_min->write<Toutput>(0, 0);
+  Toutput* ptr_out_max = out_max->write<Toutput>(0, 0);
+  *(ptr_out_min) = static_cast<Toutput>(value_out_min);
+  *(ptr_out_max) = static_cast<Toutput>(value_out_max);
 
   const size_t num_iterations = (input_element_count / smaller_input_element_count);
-  for (size_t iteration = 0; iteration < num_iterations; ++iteration) {
-    const size_t offset = iteration * smaller_input_element_count;
-    for (int c = 0; c < smaller_input_element_count; ++c) {
-      const int index = (offset + c);
-      // The two numbers we're going to add can each be in very different
-      // ranges (e.g. the quantized value '127' may represent very different
-      // real numbers in both) so we need to convert them to a common range
-      // before we sum them.
-      const T1 input_value = input_x_ptr[index];
-      const Toutput input_in_total_space = RequantizeInNewRange<T1, Toutput>(
-              input_value, input_x_min, input_x_max, total_min, total_max);
-      const T1 smaller_input_value = input_y_ptr[index];
-      const Toutput smaller_input_in_total_space = 
-          RequantizeInNewRange<T1, Toutput>(
-              smaller_input_value, input_y_min, input_y_max, total_min, total_max);
-      const Toutput total_pre = input_in_total_space + smaller_input_in_total_space;
+  const T1* ptr_x = input_x->read<T1>(0, 0);
+  const T1* ptr_y = input_y->read<T1>(0, 0);
 
-      // As noted above, we need to compensate for the offset of the actual
-      // zero point in the space we're operating in.
-      const Toutput total = total_pre + zero_in_total_space;
-      out_ptr[index] = total;
-
-
+  if (!output->getSize()) output->resize(input_x->getShape());
+  Toutput* ptr_out = output->write<Toutput>(0, 0);
+  for (size_t i = 0; i < num_iterations; ++i) {
+    size_t offset = i * smaller_input_element_count;
+    for (size_t c = 0; c < smaller_input_element_count; ++c) {
+      T1 x = *(ptr_x + offset + c);
+      T1 y = *(ptr_y + c);
+      Toutput new_x = RequantizeInNewRange<T1, Toutput>(x, value_x_min, value_x_max, value_out_min, value_out_max);
+      Toutput new_y = RequantizeInNewRange<T1, Toutput>(y, value_y_min, value_y_max, value_out_min, value_out_max);
+      *(ptr_out+offset+c) = new_x + new_y;
     }
   }
-
 }
 
 
+// Note input_x should have >= the number of elements in input_y
+// https://github.com/tensorflow/tensorflow/blob/master/tensorflow/core/kernels/quantized_add_op.cc
+// T1: input quantize type
+// T2: input dequantize type
+// Toutput: output quantize type
+// the base template
+template <class T1, class T2, class Toutput>
+void QuantizedMul(S_TENSOR input_x, S_TENSOR input_y,
+                  S_TENSOR min_x, S_TENSOR max_x,
+                  S_TENSOR min_y, S_TENSOR max_y,
+                  S_TENSOR output, S_TENSOR out_min, S_TENSOR out_max) {
+  const uint32_t input_element_count = input_x->getSize();
+  const uint32_t smaller_input_element_count = input_y->getSize();
+  const float value_x_min = *(min_x->read<float>(0, 0));
+  const float value_x_max = *(max_x->read<float>(0, 0));
+  const float value_y_min = *(min_y->read<float>(0, 0));
+  const float value_y_max = *(max_y->read<float>(0, 0));
+
+  const int32_t offset_x = FloatToQuantizedUnclamped<T1>(0.0f, value_x_min, value_x_max);  // NT: what 0 quantized to; depends on // Eigen::NumTraits<T>::lowest()
+  const int32_t offset_y = FloatToQuantizedUnclamped<T2>(0.0f, value_y_min, value_y_max);
+  const int32_t shift_out = 0;
+
+  const int32_t highest = static_cast<int32_t>(std::numeric_limits<Toutput>::max());
+  const int32_t lowest = static_cast<int32_t>(std::numeric_limits<Toutput>::min());
+  const int32_t rounding = (shift_out < 1) ? 0 : (1 << (shift_out - 1));
+
+  float value_out_min;
+  float value_out_max;
+
+  float* ptr_out_min = out_min->write<float>(0, 0);
+  float* ptr_out_max = out_max->write<float>(0, 0);
+
+  const size_t num_iterations = (input_element_count / smaller_input_element_count);
+  const T1* ptr_x = input_x->read<T1>(0, 0);
+  const T1* ptr_y = input_y->read<T1>(0, 0);
+
+  // if (!output->getSize()) 
+    output->resize(input_x->getShape());
+
+  Toutput* ptr_out = output->write<Toutput>(0, 0);
+  if(smaller_input_element_count == 1){
+    for(int i = 0; i < input_x->getSize(); i++){
+      Toutput t = (static_cast<int32_t>(ptr_x[i]) - offset_x) *
+                (static_cast<int32_t>(ptr_y[0]) - offset_y);
+      ptr_out[i] = t;
+    }
+  } else { //Vector multiply
+    for(int i = 0; i < smaller_input_element_count; i++){
+      Toutput t = (static_cast<int32_t>(ptr_x[i]) - offset_x) *
+                (static_cast<int32_t>(ptr_y[i]) - offset_y);
+      ptr_out[i] = t;
+    } //Tensor multiply as well???
+  }
+
+  QuantizationRangeForMultiplication<T1, T2, Toutput>(value_x_min, value_x_max, value_y_min, value_y_max,
+      &value_out_min, &value_out_max);
+  
+  *(ptr_out_min) = static_cast<float>(value_out_min);
+  *(ptr_out_max) = static_cast<float>(value_out_max);
+}
+
+template <>
+void QuantizedAdd<uint8_t, uint8_t, int>(
+  S_TENSOR input_x, S_TENSOR input_y,
+  S_TENSOR min_x, S_TENSOR max_x,
+  S_TENSOR min_y, S_TENSOR max_y,
+  S_TENSOR output, S_TENSOR out_min, S_TENSOR out_max);
+
+/*
+template <>
+void QuantizedMul<uint8_t, uint8_t, int>(
+  S_TENSOR input_x, S_TENSOR input_y,
+  S_TENSOR min_x, S_TENSOR max_x,
+  S_TENSOR min_y, S_TENSOR max_y,
+  S_TENSOR output, S_TENSOR out_min, S_TENSOR out_max);
+*/
 template<class T1, class T2, class T3>
 class QuantizedAddOp : public Operator {
   public:
@@ -472,7 +470,22 @@ class QuantizedAddOp : public Operator {
     }
 
     virtual void compute() override {
-        QuantizedAdd<unsigned char, float, int>(inputs[0], inputs[3],  
+        QuantizedAdd<T1, T2, T3>(inputs[0], inputs[3],  
+            inputs[1], inputs[2], inputs[4], inputs[5],
+            outputs[0], outputs[1], outputs[2]);
+    }
+};
+
+template<class T1, class T2, class T3>
+class QuantizedMulOp : public Operator {
+  public:
+      QuantizedMulOp() {
+      n_inputs = 6;
+      n_outputs = 3;
+    }
+
+    virtual void compute() override {
+        QuantizedMul<T1, T2, T3>(inputs[0], inputs[3],  
             inputs[1], inputs[2], inputs[4], inputs[5],
             outputs[0], outputs[1], outputs[2]);
     }
